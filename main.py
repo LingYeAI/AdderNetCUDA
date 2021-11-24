@@ -13,12 +13,13 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader 
 import argparse
 import math
+import time
 
 parser = argparse.ArgumentParser(description='train-addernet')
 
 # Basic model parameters.
-parser.add_argument('--data', type=str, default='/cache/data/')
-parser.add_argument('--output_dir', type=str, default='/cache/models/')
+parser.add_argument('--data', type=str, default='./data/')
+parser.add_argument('--output_dir', type=str, default='./models/')
 args = parser.parse_args()
 
 os.makedirs(args.output_dir, exist_ok=True)  
@@ -39,15 +40,17 @@ transform_test = transforms.Compose([
 ])
 
 data_train = CIFAR10(args.data,
-                   transform=transform_train)
+                   transform=transform_train,
+                   download=True)
 data_test = CIFAR10(args.data,
                   train=False,
-                  transform=transform_test)
+                  transform=transform_test,
+                  download=True)
 
 data_train_loader = DataLoader(data_train, batch_size=256, shuffle=True, num_workers=8)
 data_test_loader = DataLoader(data_test, batch_size=100, num_workers=0)
 
-net = resnet20().cuda()
+net = resnet20(use_cuda = False).cuda()
 criterion = torch.nn.CrossEntropyLoss().cuda()
 optimizer = torch.optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
 
@@ -62,6 +65,7 @@ def train(epoch):
     global cur_batch_win
     net.train()
     loss_list, batch_list = [], []
+    old_t = time.time()
     for i, (images, labels) in enumerate(data_train_loader):
         images, labels = Variable(images).cuda(), Variable(labels).cuda()
  
@@ -74,8 +78,12 @@ def train(epoch):
         loss_list.append(loss.data.item())
         batch_list.append(i+1)
  
-        if i == 1:
-            print('Train - Epoch %d, Batch: %d, Loss: %f' % (epoch, i, loss.data.item()))
+        # if i % 4 == 1:
+        new_t = time.time()
+        print('Train - Epoch %d, Batch: %d, Loss: %f, Time %3f' % (epoch, i, loss.data.item(), new_t - old_t))
+        
+        # print("batch time:{}s".format(new_t - old_t))
+        old_t = new_t
  
         loss.backward()
         optimizer.step()
@@ -107,7 +115,7 @@ def train_and_test(epoch):
  
  
 def main():
-    epoch = 400
+    epoch = 2
     for e in range(1, epoch):
         train_and_test(e)
     torch.save(net,args.output_dir + 'addernet')
