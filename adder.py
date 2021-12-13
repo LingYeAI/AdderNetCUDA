@@ -49,9 +49,9 @@ class adder(Function):
         output = torch.zeros((Co, HoWoN), device=torch.device('cuda:0'))
         adder_cuda.ADDER_CONV(X_col, W_col, output)
 
-        ground_truth = -(W_col.unsqueeze(2)-X_col.unsqueeze(0)).abs().sum(1)
-        sub = output - ground_truth
-        print("check result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
+        # ground_truth = -(W_col.unsqueeze(2)-X_col.unsqueeze(0)).abs().sum(1)
+        # sub = output - ground_truth
+        # print("check result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
         return output
 
     @staticmethod

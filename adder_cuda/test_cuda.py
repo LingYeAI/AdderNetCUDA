@@ -20,13 +20,18 @@ def conv_no_cuda(X_col, W_col):
     return out
 
 def conv_weight_cuda(X_col, W_col, grad_output):
-    
-    return 0
+    Co = W_col.size(0)
+    CiKhKw = W_col.size(1)
+    HoWoN = X_col.size(1)
+    out = torch.zeros((Co, CiKhKw), device=torch.device('cuda:0'))
+
+    adder_cuda.ADDER_CONV_WEIGHT(grad_output, X_col, W_col, out)
+    return out
 
 def conv_weight_no_cuda(X_col, W_col, grad_output):
     # W_col : Co, CiKhKw
     # X_col : CiKhKw, HoWoN
-    # grad_output : Co, NHoWo
+    # grad_output : Co, HoWoN
     grad_W_col = ((X_col.unsqueeze(0)-W_col.unsqueeze(2))*grad_output.unsqueeze(1)).sum(2)
     return grad_W_col
 
@@ -85,6 +90,6 @@ if __name__ == "__main__":
     stride = 1
     padding = 0
 
-    test_conv(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
+    # test_conv(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
 
     test_conv_weight(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
