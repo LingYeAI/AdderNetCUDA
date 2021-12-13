@@ -5,6 +5,8 @@
 #This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the BSD 3-Clause License for more details.
 
 import os
+
+from torch.autograd.grad_mode import F
 from resnet20 import resnet20
 import torch
 from torch.autograd import Variable
@@ -118,7 +120,7 @@ def main():
     epoch = 2
     for e in range(1, epoch):
         train_and_test(e)
-    torch.save(net,args.output_dir + 'addernet')
+    torch.save(net,args.output_dir + 'addernet' + str(acc))
  
  
 if __name__ == '__main__':
