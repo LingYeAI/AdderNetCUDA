@@ -265,7 +265,7 @@ __global__ void CONV_BACKWARD(
                 float sum_i = 0.0;
                 float sum_w = 0.0;
                 // float c = 0.0;
-                for (int inner_counter = 0; inner_counter < BLOCK_SIZE; inner_co++){
+                for (int inner_counter = 0; inner_counter < BLOCK_SIZE; inner_counter++){
                     sum_i += SP_I[threadIdx.y][inner_counter][threadIdx.x];
                     sum_w += SP_W[inner_counter][threadIdx.x][threadIdx.y];;
                     // float sp = SP[inner_nhowo][threadIdx.x][threadIdx.y];

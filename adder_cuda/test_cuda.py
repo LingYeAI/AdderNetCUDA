@@ -162,7 +162,7 @@ if __name__ == "__main__":
 
     CHECK_TRUTH = 0
 
-    N = 256
+    N = 64
     Co = 64
     Ci = 64
     K = 3
