@@ -60,7 +60,15 @@ class adder(Function):
         # print("W_col size:",W_col.size())
         # print("X_col size:",X_col.size())
         # print("grad_output size:",grad_output.size())
-        grad_W_col = ((X_col.unsqueeze(0)-W_col.unsqueeze(2))*grad_output.unsqueeze(1)).sum(2)
+        # Co = W_col.size(0)
+        # HoWoN = X_col.size(1)
+        grad_W_col = torch.zeros_like(W_col)
+        adder_cuda.ADDER_CONV_WEIGHT(grad_output, X_col, W_col, grad_W_col)
+
+        gt = ((X_col.unsqueeze(0)-W_col.unsqueeze(2))*grad_output.unsqueeze(1)).sum(2)
+        sub = grad_W_col - gt
+        print("check result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
+
         grad_W_col = grad_W_col/grad_W_col.norm(p=2).clamp(min=1e-12)*math.sqrt(W_col.size(1)*W_col.size(0))/5
         grad_X_col = (-(X_col.unsqueeze(0)-W_col.unsqueeze(2)).clamp(-1,1)*grad_output.unsqueeze(1)).sum(0)
         
