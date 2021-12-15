@@ -256,7 +256,7 @@ __global__ void CONV_BACKWARD(
                 
                 for (int inner_cikhkw = 0; inner_cikhkw < BLOCK_SIZE; inner_cikhkw++){
                     float w_x = SW[inner_cikhkw][threadIdx.x] - SX[threadIdx.y][inner_cikhkw];
-                    SP_I[threadIdx.y][threadIdx.x][inner_cikhkw] = HARDTANH(w_x) * SG[threadIdx.y][threadIdx.x];
+                    SP_I[threadIdx.y][threadIdx.x][inner_cikhkw] = (HARDTANH(w_x)) * SG[threadIdx.y][threadIdx.x];
                     SP_W[threadIdx.y][threadIdx.x][inner_cikhkw] = -w_x * SG[threadIdx.y][threadIdx.x];
                 }
 

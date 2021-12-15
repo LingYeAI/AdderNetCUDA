@@ -109,7 +109,7 @@ def test_conv_weight(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH):
 
 
 def test_conv_input(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH):
-    grad_y = torch.ones((Co,  HWo * HWo * N), device=torch.device('cuda:0'))
+    grad_y = torch.randn((Co,  HWo * HWo * N), device=torch.device('cuda:0'))
     w = torch.randn((Co, Ci * K * K), device=torch.device('cuda:0'))
     x = torch.randn((Ci * K * K, HWo * HWo * N), device=torch.device('cuda:0'))
 
@@ -132,7 +132,7 @@ def test_conv_input(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH):
 
 
 def test_backward(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH):
-    grad_y = torch.ones((Co,  HWo * HWo * N), device=torch.device('cuda:0'))
+    grad_y = torch.randn((Co,  HWo * HWo * N), device=torch.device('cuda:0'))
     w = torch.randn((Co, Ci * K * K), device=torch.device('cuda:0'))
     x = torch.randn((Ci * K * K, HWo * HWo * N), device=torch.device('cuda:0'))
 
@@ -160,11 +160,11 @@ def test_backward(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH):
 
 if __name__ == "__main__":
 
-    CHECK_TRUTH = 0
+    CHECK_TRUTH = 1
 
-    N = 64
+    N = 128
     Co = 64
-    Ci = 64
+    Ci = 32
     K = 3
     HWi = 8
     HWo = 8

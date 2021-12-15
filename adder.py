@@ -45,7 +45,7 @@ class adder(Function):
         Co = W_col.size(0)
         HoWoN = X_col.size(1)
 
-        output = torch.zeros((Co, HoWoN))
+        output = torch.zeros((Co, HoWoN),device="cuda:0")
         adder_cuda.ADDER_CONV(X_col, W_col, output)
 
         ###############test code################
@@ -63,14 +63,15 @@ class adder(Function):
         adder_cuda.ADDER_BACKWARD(grad_output, X_col, W_col, grad_W_col, grad_X_col)
 
         ###############test code################
-        gt_w = ((X_col.unsqueeze(0)-W_col.unsqueeze(2))*grad_output.unsqueeze(1)).sum(2)
-        sub = grad_W_col - gt_w
-        print("check grad_W_col result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
+        # gt_w = ((X_col.unsqueeze(0)-W_col.unsqueeze(2))*grad_output.unsqueeze(1)).sum(2)
+        # sub = grad_W_col - gt_w
+        # print("check grad_W_col result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
 
-        gt_x = (-(X_col.unsqueeze(0)-W_col.unsqueeze(2)).clamp(-1,1)*grad_output.unsqueeze(1)).sum(0)
-        sub = grad_X_col - gt_x
-        print("check grad_X_col result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
-
+        # gt_x = (-(X_col.unsqueeze(0)-W_col.unsqueeze(2)).clamp(-1,1)*grad_output.unsqueeze(1)).sum(0)
+        # sub = grad_X_col - gt_x
+        # print("check grad_X_col result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
+        ###############test end#################
+        
         grad_W_col = grad_W_col/grad_W_col.norm(p=2).clamp(min=1e-12)*math.sqrt(W_col.size(1)*W_col.size(0))/5
         
         return grad_W_col, grad_X_col
