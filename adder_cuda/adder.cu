@@ -8,7 +8,8 @@ All rights reserved.
 #include <cuda_runtime.h>
 #include <ctime>
 #include <vector>
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE_CONV 16
+#define BLOCK_SIZE 8
 #define MAX_THREADS 1024
 #define MAX_BLOCKS 65535
 #define MAX_KW 3
@@ -29,18 +30,18 @@ __global__ void CONV(
     *   输入：W: Co, CiKhKw
              X: CiKhKw, HoWoN
     *   输出： output: Co, HoWoN 
-    *   block/thread: (Co/BLOCK_SIZE, min(NHoWo/BLOCK_SIZE, MAX_BLOCKS))/(BLOCK_SIZE, BLOCK_SIZE)
+    *   block/thread: (Co/BLOCK_SIZE_CONV, min(NHoWo/BLOCK_SIZE_CONV, MAX_BLOCKS))/(BLOCK_SIZE_CONV, BLOCK_SIZE_CONV)
     *   计算: -|w - x|
     */
     for(int nhowo_ = blockIdx.y * blockDim.y + threadIdx.y; nhowo_ < NHoWo; nhowo_ += gridDim.y * blockDim.y){
         for(int co_ = blockIdx.x * blockDim.x + threadIdx.x; co_ < Co; co_ += gridDim.x * blockDim.x){
-            __shared__ float SW[BLOCK_SIZE][BLOCK_SIZE];
-            __shared__ float SX[BLOCK_SIZE][BLOCK_SIZE];
+            __shared__ float SW[BLOCK_SIZE_CONV][BLOCK_SIZE_CONV];
+            __shared__ float SX[BLOCK_SIZE_CONV][BLOCK_SIZE_CONV];
 
             float* Cfinal = &output[co_ * NHoWo + nhowo_];
             float Cvalue = 0.0;
             float c = 0.0;
-            for (int cikhkw_=0; cikhkw_<CiKhKw; cikhkw_+=BLOCK_SIZE) {
+            for (int cikhkw_=0; cikhkw_<CiKhKw; cikhkw_+=BLOCK_SIZE_CONV) {
 
                 if (cikhkw_ + threadIdx.y < CiKhKw && cikhkw_ + threadIdx.x < CiKhKw){
                     SW[threadIdx.y][threadIdx.x] = W[co_ * CiKhKw + cikhkw_ + threadIdx.y];
@@ -54,7 +55,7 @@ __global__ void CONV(
                 __syncthreads();
 
                 // printf("%d %d %f %f\n",threadIdx.x,threadIdx.y,SW[threadIdx.x][threadIdx.y],SX[threadIdx.x][threadIdx.y]);
-                for (int inner_cikhkw=0; inner_cikhkw<BLOCK_SIZE; inner_cikhkw++){
+                for (int inner_cikhkw=0; inner_cikhkw<BLOCK_SIZE_CONV; inner_cikhkw++){
                     float w_x = SW[inner_cikhkw][threadIdx.x] - SX[threadIdx.y][inner_cikhkw];
                     w_x = (w_x < 0) ? w_x : -w_x;
                     float psum = w_x - c;
@@ -298,12 +299,12 @@ void ADDER_CONV_GPU(
     int NHoWo = x.size(1);
     int CiKhKw = w.size(1);
     
-    dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
-    int a1 = Co / BLOCK_SIZE + 1;
+    dim3 blockDim(BLOCK_SIZE_CONV, BLOCK_SIZE_CONV);
+    int a1 = Co / BLOCK_SIZE_CONV + 1;
     if (a1 > MAX_BLOCKS) {
         a1 = MAX_BLOCKS;   
     }
-    int a2 = NHoWo  / BLOCK_SIZE + 1;
+    int a2 = NHoWo  / BLOCK_SIZE_CONV + 1;
     if (a2 > MAX_BLOCKS) {
         a2 = MAX_BLOCKS;
     }
