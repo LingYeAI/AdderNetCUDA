@@ -12,9 +12,6 @@ All rights reserved.
 #define BLOCK_SIZE 8
 #define MAX_THREADS 1024
 #define MAX_BLOCKS 65535
-#define MAX_KW 3
-#define MAX_KH 3
-#define MULTIPLE 3
 
 #define HARDTANH(x) ((x) < (-1.0)) ? (-1.0) : (((x) <= (1.0)) ? (x) : (1.0))
 
@@ -79,14 +76,6 @@ __global__ void CONV_WEIGHT(
     const int NHoWo,
     const int Co)
 {
-    /*
-    *   输入：W: Co, CiKhKw
-             X: CiKhKw, HoWoN
-             grad_y: Co, HoWoN
-    *   输出： grad_w: Co, CiKhKw
-    *   grid/block/thread: 1/(Co, NHoWo)/(BLOCK_SIZE, BLOCK_SIZE)
-    *   计算: grad_y * (x - w)
-    */
     int thread_y = blockIdx.y * blockDim.y + threadIdx.y;
     int thread_x = blockIdx.x * blockDim.x + threadIdx.x;
     int thread_num_y = gridDim.y * blockDim.y;
@@ -148,14 +137,6 @@ __global__ void CONV_INPUT(
     const int NHoWo,
     const int Co)
 {
-    /*
-    *   输入：W: Co, CiKhKw
-             X: CiKhKw, HoWoN
-             grad_y: Co, HoWoN
-    *   输出： grad_i: CiKhKw, HoWoN
-    *   grid/block/thread: 1/(Co, NHoWo)/(BLOCK_SIZE, BLOCK_SIZE)
-    *   计算: grad_y * clamp((w - x), -1, 1)
-    */
     int thread_y = blockIdx.y * blockDim.y + threadIdx.y;
     int thread_x = blockIdx.x * blockDim.x + threadIdx.x;
     int thread_num_y = gridDim.y * blockDim.y;
@@ -224,7 +205,7 @@ __global__ void CONV_BACKWARD(
                 grad_y: Co, HoWoN
     *   output: grad_i: CiKhKw, HoWoN
     *           grad_w: Co, CiKhKw
-    *   grid/block/thread: 1/(Co, NHoWo)/(BLOCK_SIZE, BLOCK_SIZE)
+    *   grid/block/thread: 1/(Co/BLOCK_SIZE, NHoWo/BLOCK_SIZE)/(BLOCK_SIZE, BLOCK_SIZE)
     *   
     */
     int thread_y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -240,7 +221,7 @@ __global__ void CONV_BACKWARD(
             __shared__ float SP_I[BLOCK_SIZE][BLOCK_SIZE][BLOCK_SIZE]; //shared psum for grad_i
             __shared__ float SP_W[BLOCK_SIZE][BLOCK_SIZE][BLOCK_SIZE]; //shared psum for grad_w
 
-            SG[threadIdx.y][threadIdx.x] = grad_y[co_  * NHoWo + nhowo_];
+            SG[threadIdx.y][threadIdx.x] = grad_y[co_ * NHoWo + nhowo_];
 
             for (int cikhkw_=0; cikhkw_<CiKhKw; cikhkw_+=BLOCK_SIZE) {
 
@@ -278,7 +259,6 @@ __global__ void CONV_BACKWARD(
 
                 atomicAdd(&grad_i[(cikhkw_ + threadIdx.x) * NHoWo + nhowo_], sum_i);
                 atomicAdd(&grad_w[co_ * CiKhKw + cikhkw_ + threadIdx.y], sum_w);
-                // grad_w[co_ * CiKhKw + cikhkw_ + threadIdx.y] += result;
             }
             
         }
@@ -289,12 +269,7 @@ void ADDER_CONV_GPU(
     torch::Tensor x,
     torch::Tensor w,
     torch::Tensor y)
-{/*
-    *   输入： x: 
-    *         w: Co * Ci * Kh * Kw
-    *   输出： y: N * Ho * Wo * Co
-    *   计算: -|w - x|
-    */
+{
     int Co = w.size(0);
     int NHoWo = x.size(1);
     int CiKhKw = w.size(1);
@@ -328,15 +303,6 @@ void ADDER_CONV_WEIGHT_GPU(
     torch::Tensor w,
     torch::Tensor grad_w)
 {
-    /*
-    *   输入：W: Co, CiKhKw
-             X: CiKhKw, HoWoN
-             grad_y: Co, HoWoN
-    *   输出： grad_w: Co, CiKhKw
-    *   grid/block/thread: 1/(Co, NHoWo)/(BLOCK_SIZE, BLOCK_SIZE)
-    *   计算: grad_y * (x - w)
-    */
-
     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
     int Co = w.size(0);
     int CiKhKw = w.size(1);
@@ -372,15 +338,6 @@ void ADDER_CONV_INPUT_GPU(
     torch::Tensor w,
     torch::Tensor grad_i)
 {
-    /*
-    *   输入：W: Co, CiKhKw
-             X: CiKhKw, HoWoN
-             grad_y: Co, HoWoN
-    *   输出： grad_i: CiKhKw, HoWoN
-    *   grid/block/thread: 1/(Co, NHoWo)/(BLOCK_SIZE, BLOCK_SIZE)
-    *   计算: grad_y * clamp((w - x), -1, 1)
-    */
-
     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
     int Co = w.size(0);
     int CiKhKw = w.size(1);
@@ -423,7 +380,7 @@ void ADDER_BACKWARD_GPU(
                 grad_y: Co, HoWoN
     *   output: grad_i: CiKhKw, HoWoN
     *           grad_w: Co, CiKhKw
-    *   grid/block/thread: 1/(Co, NHoWo)/(BLOCK_SIZE, BLOCK_SIZE)
+    *   grid/block/thread: 1/(Co/BLOCK_SIZE, NHoWo/BLOCK_SIZE)/(BLOCK_SIZE, BLOCK_SIZE)
     *   
     */
 
@@ -441,7 +398,7 @@ void ADDER_BACKWARD_GPU(
         a2 = MAX_BLOCKS;
     }
     dim3 gridDim(a1, a2);
-    // dim3 gridDim(Co, NHoWo);  
+    
     AT_DISPATCH_ALL_TYPES(x.type(), "backward kernel", ([&] {
         CONV_BACKWARD<<<gridDim, blockDim>>>(
             grad_y.data<float>(),

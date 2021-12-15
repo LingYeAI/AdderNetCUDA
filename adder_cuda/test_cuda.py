@@ -160,7 +160,7 @@ def test_backward(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH):
 
 if __name__ == "__main__":
 
-    CHECK_TRUTH = 1
+    CHECK_TRUTH = 0
 
     N = 128
     Co = 64

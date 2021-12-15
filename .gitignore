@@ -6,3 +6,4 @@ adder_cuda/dist/
 build/
 data/
 models/
+*.qdrep
