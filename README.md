@@ -27,7 +27,7 @@ The CUDA version of AdderNet has achieved a 5× speed increase over the original
 |Time(%)|	Time	|Calls	|Avg	    |Min	    |Max	    |Name|
 |-------|-----------|-------|-----------|-----------|-----------|----|
 |48.57	|30.4752s	|3920	|7.7743ms	|162.70us	|12.271ms	|CONV_BACKWARD|
-|4.85	|21.8686s	|19680	|1.1112ms	|5.3770us	|11.827ms	|_ZN2at6native27unrolled_elementwise_kernel...|
+|34.85	|21.8686s	|19680	|1.1112ms	|5.3770us	|11.827ms	|_ZN2at6native27unrolled_elementwise_kernel...|
 |7.46	|4.67901s	|5920	|790.37us	|26.529us	|1.5841ms	|CONV|
 |2.24	|1.40372s	|3920	|358.09us	|31.298us	|845.80us	|col2im_kernel|
 |2.10	|1.31882s	|36862	|35.777us	|1.4720us	|276.24us	|vectorized_elementwise_kernel|
