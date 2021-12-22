@@ -160,21 +160,21 @@ def test_backward(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH):
 
 if __name__ == "__main__":
 
-    CHECK_TRUTH = 0
+    CHECK_TRUTH = 1
 
-    N = 128
-    Co = 64
-    Ci = 32
+    N = 256
+    Co = 12
+    Ci = 36
     K = 3
     HWi = 8
     HWo = 8
     stride = 1
     padding = 0
 
-    # test_conv(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
+    test_conv(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
 
     # test_conv_weight(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
 
     # test_conv_input(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
 
-    test_backward(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH)
+    # test_backward(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH)

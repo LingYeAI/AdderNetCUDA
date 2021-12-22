@@ -26,6 +26,8 @@ def adder2d_function(X, W, stride=1, padding=0):
     h_out = (h_x - h_filter + 2 * padding) / stride + 1
     w_out = (w_x - w_filter + 2 * padding) / stride + 1
 
+    # n = n_x * n_filters if depth_wise else n_x
+
     h_out, w_out = int(h_out), int(w_out)
     X_col = torch.nn.functional.unfold(X.view(1, -1, h_x, w_x), h_filter, dilation=1, padding=padding, stride=stride).view(n_x, -1, h_out*w_out)
     X_col = X_col.permute(1,2,0).contiguous().view(X_col.size(1),-1)
@@ -61,7 +63,8 @@ class adder(Function):
         grad_W_col = torch.zeros_like(W_col)
         grad_X_col = torch.zeros_like(X_col)
         adder_cuda.ADDER_BACKWARD(grad_output, X_col, W_col, grad_W_col, grad_X_col)
-
+        # print(torch.any(torch.isnan(grad_W_col)))
+        # print(torch.any(torch.isnan(grad_X_col)))
         ###############test code################
         # gt_w = ((X_col.unsqueeze(0)-W_col.unsqueeze(2))*grad_output.unsqueeze(1)).sum(2)
         # sub = grad_W_col - gt_w
@@ -71,7 +74,8 @@ class adder(Function):
         # sub = grad_X_col - gt_x
         # print("check grad_X_col result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
         ###############test end#################
-        
+        # print(grad_W_col[0][0])
+        # print(grad_W_col.norm(p=2))
         grad_W_col = grad_W_col/grad_W_col.norm(p=2).clamp(min=1e-12)*math.sqrt(W_col.size(1)*W_col.size(0))/5
         
         return grad_W_col, grad_X_col
@@ -79,21 +83,26 @@ class adder(Function):
 
 class adder2d(nn.Module):
 
-    def __init__(self,input_channel,output_channel,kernel_size, stride=1, padding=0, bias = False, use_cuda = False):
+    def __init__(self, input_channel, output_channel, kernel_size, stride=1, padding=0, bias = False, depth_wise = False):
         super(adder2d, self).__init__()
-        self.use_cuda = use_cuda
         self.stride = stride
         self.padding = padding
         self.input_channel = input_channel
         self.output_channel = output_channel
         self.kernel_size = kernel_size
-        self.adder = torch.nn.Parameter(nn.init.normal_(torch.randn(output_channel,input_channel,kernel_size,kernel_size)))
+        self.depth_wise = depth_wise
+
+        if depth_wise:
+            self.adder = torch.nn.Parameter(nn.init.normal_(torch.randn(output_channel,1,kernel_size,kernel_size)))
+        else:
+            self.adder = torch.nn.Parameter(nn.init.normal_(torch.randn(output_channel,input_channel,kernel_size,kernel_size)))
         self.bias = bias
         if bias:
             self.b = torch.nn.Parameter(nn.init.uniform_(torch.zeros(output_channel)))
 
     def forward(self, x):
-        output = adder2d_function(x,self.adder, self.stride, self.padding)
+        # print(self.depth_wise)
+        output = adder2d_function(x, self.adder, self.stride, self.padding)
         if self.bias:
             output += self.b.unsqueeze(0).unsqueeze(2).unsqueeze(3)
         

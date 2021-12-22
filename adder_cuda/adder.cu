@@ -13,6 +13,7 @@ All rights reserved.
 #define MAX_THREADS 1024
 #define MAX_BLOCKS 65535
 
+#define CEIL_DIV(m,n) ( (m) + (n) - 1 ) / (n)
 #define HARDTANH(x) ((x) < (-1.0)) ? (-1.0) : (((x) <= (1.0)) ? (x) : (1.0))
 
 __global__ void CONV(
@@ -215,6 +216,7 @@ __global__ void CONV_BACKWARD(
 
     for(int nhowo_ = thread_y; nhowo_ < NHoWo; nhowo_ += thread_num_y){
         for(int co_ = thread_x; co_ < Co; co_ += thread_num_x){
+            
             __shared__ float SW[BLOCK_SIZE][BLOCK_SIZE]; //shared weight
             __shared__ float SX[BLOCK_SIZE][BLOCK_SIZE]; //shared input
             __shared__ float SG[BLOCK_SIZE][BLOCK_SIZE]; //shared grad_y
@@ -236,6 +238,7 @@ __global__ void CONV_BACKWARD(
 
                 __syncthreads();
                 
+                #pragma unroll
                 for (int inner_cikhkw = 0; inner_cikhkw < BLOCK_SIZE; inner_cikhkw++){
                     float w_x = SW[inner_cikhkw][threadIdx.x] - SX[threadIdx.y][inner_cikhkw];
                     SP_I[threadIdx.y][threadIdx.x][inner_cikhkw] = (HARDTANH(w_x)) * SG[threadIdx.y][threadIdx.x];
@@ -247,6 +250,7 @@ __global__ void CONV_BACKWARD(
                 float sum_i = 0.0;
                 float sum_w = 0.0;
                 // float c = 0.0;
+                #pragma unroll
                 for (int inner_counter = 0; inner_counter < BLOCK_SIZE; inner_counter++){
                     sum_i += SP_I[threadIdx.y][inner_counter][threadIdx.x];
                     sum_w += SP_W[inner_counter][threadIdx.x][threadIdx.y];;
@@ -338,22 +342,51 @@ void ADDER_CONV_INPUT_GPU(
     torch::Tensor w,
     torch::Tensor grad_i)
 {
-    dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
+
     int Co = w.size(0);
     int CiKhKw = w.size(1);
     int NHoWo = x.size(1);
 
-    // dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
-    int a1 = Co / BLOCK_SIZE + 1;
+    int thread_num_x;
+    int thread_num_y;
+
+    if (Co % 16 == 0){
+        thread_num_x = 16;
+    }
+    else if (Co % 12 == 0){
+        thread_num_x = 12;
+    }
+    else{
+        thread_num_x = Co;
+    }
+
+    if (NHoWo % 16 == 0){
+        thread_num_y = 16;
+    }
+    else if (NHoWo % 8 == 0){
+        thread_num_y = 8;
+    }
+    else if (NHoWo % 12 == 0){
+        thread_num_y = 12;
+    }
+    else if (NHoWo % 7 == 0){
+        thread_num_y = 7;
+    }
+    else{
+        thread_num_y = NHoWo;
+    }
+
+    dim3 blockDim(thread_num_x, thread_num_y);
+
+    int a1 = CEIL_DIV(Co,thread_num_x);
     if (a1 > MAX_BLOCKS) {
         a1 = MAX_BLOCKS;   
     }
-    int a2 = NHoWo  / BLOCK_SIZE + 1;
+    int a2 = CEIL_DIV(NHoWo,thread_num_y);
     if (a2 > MAX_BLOCKS) {
         a2 = MAX_BLOCKS;
     }
     dim3 gridDim(a1, a2);
-    // dim3 gridDim(Co, NHoWo);  
     AT_DISPATCH_ALL_TYPES(x.type(), "conv input kernel", ([&] {
         CONV_INPUT<<<gridDim, blockDim>>>(
             grad_y.data<float>(),
@@ -383,17 +416,43 @@ void ADDER_BACKWARD_GPU(
     *   grid/block/thread: 1/(Co/BLOCK_SIZE, NHoWo/BLOCK_SIZE)/(BLOCK_SIZE, BLOCK_SIZE)
     *   
     */
-
-    dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE);
     int Co = w.size(0);
     int CiKhKw = w.size(1);
     int NHoWo = x.size(1);
 
-    int a1 = Co / BLOCK_SIZE + 1;
+    int thread_num_x;
+    int thread_num_y;
+
+    if (Co % 8 == 0){
+        thread_num_x = 8;
+    }
+    else if (Co % 12 == 0){
+        thread_num_x = 12;
+    }
+    else{
+        thread_num_x = Co;
+    }
+
+    if (NHoWo % 8 == 0){
+        thread_num_y = 8;
+    }
+    else if (NHoWo % 12 == 0){
+        thread_num_y = 12;
+    }
+    else if (NHoWo % 7 == 0){
+        thread_num_y = 7;
+    }
+    else{
+        thread_num_y = NHoWo;
+    }
+
+    dim3 blockDim(thread_num_x, thread_num_y);
+
+    int a1 = CEIL_DIV(Co,thread_num_x);
     if (a1 > MAX_BLOCKS) {
         a1 = MAX_BLOCKS;   
     }
-    int a2 = NHoWo  / BLOCK_SIZE + 1;
+    int a2 = CEIL_DIV(NHoWo,thread_num_y);
     if (a2 > MAX_BLOCKS) {
         a2 = MAX_BLOCKS;
     }

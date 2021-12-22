@@ -12,7 +12,7 @@ python main.py
 pytorch 1.10.0
 CUDA 11.3
 
-### benchmark
+### Benchmark
 
 | version                                                   | training_time_per_batch/s |
 | --------------------------------------------------------- | ------------------------- |

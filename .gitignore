@@ -6,4 +6,7 @@ adder_cuda/dist/
 build/
 data/
 models/
+wandb/
 *.qdrep
+*.out
+mobilenet.py

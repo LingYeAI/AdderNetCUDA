@@ -7,7 +7,9 @@
 import os
 
 from torch.autograd.grad_mode import F
-from resnet20 import resnet20
+# from resnet20 import resnet20
+from vgg import vgg16
+from densenet import densenet_cifar
 import torch
 from torch.autograd import Variable
 from torchvision.datasets import CIFAR10
@@ -16,6 +18,10 @@ from torch.utils.data import DataLoader
 import argparse
 import math
 import time
+import wandb
+import numpy as np
+
+wandb.init(project="DenseNet")
 
 parser = argparse.ArgumentParser(description='train-addernet')
 
@@ -28,6 +34,7 @@ os.makedirs(args.output_dir, exist_ok=True)
 
 acc = 0
 acc_best = 0
+train_loss = 0
 
 transform_train = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
@@ -49,13 +56,14 @@ data_test = CIFAR10(args.data,
                   transform=transform_test,
                   download=True)
 
-data_train_loader = DataLoader(data_train, batch_size=256, shuffle=True, num_workers=8)
+data_train_loader = DataLoader(data_train, batch_size=216, shuffle=True, num_workers=8)
 data_test_loader = DataLoader(data_test, batch_size=100, num_workers=0)
 
-net = resnet20(use_cuda = False).cuda()
+net = densenet_cifar().cuda()
+# net = torch.load("./models/addernet.pt")
 criterion = torch.nn.CrossEntropyLoss().cuda()
 optimizer = torch.optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
-
+wandb.watch(net)
 def adjust_learning_rate(optimizer, epoch):
     """For resnet, the lr starts from 0.1, and is divided by 10 at 80 and 120 epochs"""
     lr = 0.05 * (1+math.cos(float(epoch)/400*math.pi))
@@ -64,15 +72,18 @@ def adjust_learning_rate(optimizer, epoch):
         
 def train(epoch):
     adjust_learning_rate(optimizer, epoch)
-    global cur_batch_win
+    global cur_batch_win,train_loss
+    # train_loss = 0
     net.train()
     loss_list, batch_list = [], []
     old_t = time.time()
     for i, (images, labels) in enumerate(data_train_loader):
         images, labels = Variable(images).cuda(), Variable(labels).cuda()
+        if images.size(0) != 216:
+            break
  
         optimizer.zero_grad()
- 
+
         output = net(images)
  
         loss = criterion(output, labels)
@@ -80,19 +91,22 @@ def train(epoch):
         loss_list.append(loss.data.item())
         batch_list.append(i+1)
  
-        # if i % 4 == 1:
-        new_t = time.time()
-        print('Train - Epoch %d, Batch: %d, Loss: %f, Time %3f' % (epoch, i, loss.data.item(), new_t - old_t))
         
+        new_t = time.time()
+        # if i % 20 == 1:
+        # train_loss += loss.data.item()
+        print('Train - Epoch %d, Batch: %d, Loss: %f, Time %3f' % (epoch, i, loss.data.item(), new_t - old_t))
+        # wandb.log({"Epoch":epoch,"Batch":i,"Loss":loss.data.item(),"Time":new_t - old_t})
         # print("batch time:{}s".format(new_t - old_t))
         old_t = new_t
  
         loss.backward()
         optimizer.step()
+    train_loss = np.mean(loss_list)
  
  
-def test():
-    global acc, acc_best
+def test(e):
+    global acc, acc_best,train_loss
     net.eval()
     total_correct = 0
     avg_loss = 0.0
@@ -109,18 +123,22 @@ def test():
     if acc_best < acc:
         acc_best = acc
     print('Test Avg. Loss: %f, Accuracy: %f' % (avg_loss.data.item(), acc))
+    wandb.log({"Epoch":e, "Test Loss":avg_loss.data.item(),"Train loss":train_loss,"Accuracy":acc})
  
  
 def train_and_test(epoch):
     train(epoch)
-    test()
+    test(epoch)
  
  
 def main():
-    epoch = 2
+    epoch = 401
+    # net = torch.load("./models/addernet.pt")
+    # net.load_state_dict(torch.load("./models/addernet.pt"))
     for e in range(1, epoch):
         train_and_test(e)
-    torch.save(net,args.output_dir + 'addernet' + str(acc))
+        if e%20 == 0:
+            torch.save(net.state_dict(),args.output_dir + 'densenet' + str(acc_best))
  
  
 if __name__ == '__main__':
