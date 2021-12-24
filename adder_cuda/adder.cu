@@ -9,7 +9,7 @@ All rights reserved.
 #include <ctime>
 #include <vector>
 #define BLOCK_SIZE_CONV 16
-#define BLOCK_SIZE 8
+#define BLOCK_SIZE 12
 #define MAX_THREADS 1024
 #define MAX_BLOCKS 65535
 
@@ -31,6 +31,7 @@ __global__ void CONV(
     *   block/thread: (Co/BLOCK_SIZE_CONV, min(NHoWo/BLOCK_SIZE_CONV, MAX_BLOCKS))/(BLOCK_SIZE_CONV, BLOCK_SIZE_CONV)
     *   计算: -|w - x|
     */
+    int stride = blockDim.x;
     for(int nhowo_ = blockIdx.y * blockDim.y + threadIdx.y; nhowo_ < NHoWo; nhowo_ += gridDim.y * blockDim.y){
         for(int co_ = blockIdx.x * blockDim.x + threadIdx.x; co_ < Co; co_ += gridDim.x * blockDim.x){
             __shared__ float SW[BLOCK_SIZE_CONV][BLOCK_SIZE_CONV];
@@ -39,7 +40,7 @@ __global__ void CONV(
             float* Cfinal = &output[co_ * NHoWo + nhowo_];
             float Cvalue = 0.0;
             float c = 0.0;
-            for (int cikhkw_=0; cikhkw_<CiKhKw; cikhkw_+=BLOCK_SIZE_CONV) {
+            for (int cikhkw_=0; cikhkw_<CiKhKw; cikhkw_+=stride) {
 
                 if (cikhkw_ + threadIdx.y < CiKhKw && cikhkw_ + threadIdx.x < CiKhKw){
                     SW[threadIdx.y][threadIdx.x] = W[co_ * CiKhKw + cikhkw_ + threadIdx.y];
@@ -53,7 +54,7 @@ __global__ void CONV(
                 __syncthreads();
 
                 // printf("%d %d %f %f\n",threadIdx.x,threadIdx.y,SW[threadIdx.x][threadIdx.y],SX[threadIdx.x][threadIdx.y]);
-                for (int inner_cikhkw=0; inner_cikhkw<BLOCK_SIZE_CONV; inner_cikhkw++){
+                for (int inner_cikhkw=0; inner_cikhkw<stride; inner_cikhkw++){
                     float w_x = SW[inner_cikhkw][threadIdx.x] - SX[threadIdx.y][inner_cikhkw];
                     w_x = (w_x < 0) ? w_x : -w_x;
                     float psum = w_x - c;
@@ -213,6 +214,7 @@ __global__ void CONV_BACKWARD(
     int thread_x = blockIdx.x * blockDim.x + threadIdx.x;
     int thread_num_y = gridDim.y * blockDim.y;
     int thread_num_x = gridDim.x * blockDim.x;
+    int stride = blockDim.x;
 
     for(int nhowo_ = thread_y; nhowo_ < NHoWo; nhowo_ += thread_num_y){
         for(int co_ = thread_x; co_ < Co; co_ += thread_num_x){
@@ -225,7 +227,7 @@ __global__ void CONV_BACKWARD(
 
             SG[threadIdx.y][threadIdx.x] = grad_y[co_ * NHoWo + nhowo_];
 
-            for (int cikhkw_=0; cikhkw_<CiKhKw; cikhkw_+=BLOCK_SIZE) {
+            for (int cikhkw_=0; cikhkw_<CiKhKw; cikhkw_+=stride) {
 
                 if (cikhkw_ + threadIdx.y < CiKhKw && cikhkw_ + threadIdx.x < CiKhKw){
                     SW[threadIdx.y][threadIdx.x] = W[co_ * CiKhKw + cikhkw_ + threadIdx.y];
@@ -239,7 +241,7 @@ __global__ void CONV_BACKWARD(
                 __syncthreads();
                 
                 #pragma unroll
-                for (int inner_cikhkw = 0; inner_cikhkw < BLOCK_SIZE; inner_cikhkw++){
+                for (int inner_cikhkw = 0; inner_cikhkw < stride; inner_cikhkw++){
                     float w_x = SW[inner_cikhkw][threadIdx.x] - SX[threadIdx.y][inner_cikhkw];
                     SP_I[threadIdx.y][threadIdx.x][inner_cikhkw] = (HARDTANH(w_x)) * SG[threadIdx.y][threadIdx.x];
                     SP_W[threadIdx.y][threadIdx.x][inner_cikhkw] = -w_x * SG[threadIdx.y][threadIdx.x];
@@ -251,7 +253,7 @@ __global__ void CONV_BACKWARD(
                 float sum_w = 0.0;
                 // float c = 0.0;
                 #pragma unroll
-                for (int inner_counter = 0; inner_counter < BLOCK_SIZE; inner_counter++){
+                for (int inner_counter = 0; inner_counter < stride; inner_counter++){
                     sum_i += SP_I[threadIdx.y][inner_counter][threadIdx.x];
                     sum_w += SP_W[inner_counter][threadIdx.x][threadIdx.y];;
                     // float sp = SP[inner_nhowo][threadIdx.x][threadIdx.y];
@@ -277,13 +279,29 @@ void ADDER_CONV_GPU(
     int Co = w.size(0);
     int NHoWo = x.size(1);
     int CiKhKw = w.size(1);
+
+    int thread_num_x;
+    int thread_num_y;
+
+    if ((Co % 16 == 0) && (NHoWo % 16 == 0)){
+        thread_num_x = 16;
+        thread_num_y = 16;
+    }
+    else if ((Co % 12 == 0) && (NHoWo % 12 == 0)){
+        thread_num_x = 12;
+        thread_num_y = 12;
+    }
+    else {
+        printf("NHoWo and Co should be the multiple of 16 or 12 at the same time.\n");
+        abort();
+    }
     
-    dim3 blockDim(BLOCK_SIZE_CONV, BLOCK_SIZE_CONV);
-    int a1 = Co / BLOCK_SIZE_CONV + 1;
+    dim3 blockDim(thread_num_x, thread_num_y);
+    int a1 = CEIL_DIV(Co,thread_num_x);
     if (a1 > MAX_BLOCKS) {
         a1 = MAX_BLOCKS;   
     }
-    int a2 = NHoWo  / BLOCK_SIZE_CONV + 1;
+    int a2 = CEIL_DIV(NHoWo,thread_num_y);
     if (a2 > MAX_BLOCKS) {
         a2 = MAX_BLOCKS;
     }
@@ -350,30 +368,13 @@ void ADDER_CONV_INPUT_GPU(
     int thread_num_x;
     int thread_num_y;
 
-    if (Co % 16 == 0){
-        thread_num_x = 16;
+    if (Co % 8 == 0){
+        thread_num_x = 8;
+        thread_num_y = 8;
     }
     else if (Co % 12 == 0){
         thread_num_x = 12;
-    }
-    else{
-        thread_num_x = Co;
-    }
-
-    if (NHoWo % 16 == 0){
-        thread_num_y = 16;
-    }
-    else if (NHoWo % 8 == 0){
-        thread_num_y = 8;
-    }
-    else if (NHoWo % 12 == 0){
         thread_num_y = 12;
-    }
-    else if (NHoWo % 7 == 0){
-        thread_num_y = 7;
-    }
-    else{
-        thread_num_y = NHoWo;
     }
 
     dim3 blockDim(thread_num_x, thread_num_y);
@@ -423,27 +424,18 @@ void ADDER_BACKWARD_GPU(
     int thread_num_x;
     int thread_num_y;
 
-    if (Co % 8 == 0){
+    
+    if ((Co % 8 == 0) && (NHoWo % 8 == 0)){
         thread_num_x = 8;
-    }
-    else if (Co % 12 == 0){
-        thread_num_x = 12;
-    }
-    else{
-        thread_num_x = Co;
-    }
-
-    if (NHoWo % 8 == 0){
         thread_num_y = 8;
     }
-    else if (NHoWo % 12 == 0){
+    else if ((Co % 12 == 0) && (NHoWo % 12 == 0)){
+        thread_num_x = 12;
         thread_num_y = 12;
     }
-    else if (NHoWo % 7 == 0){
-        thread_num_y = 7;
-    }
-    else{
-        thread_num_y = NHoWo;
+    else {
+        printf("NHoWo and Co should be the multiple of 8 or 12 at the same time.\n");
+        abort();
     }
 
     dim3 blockDim(thread_num_x, thread_num_y);

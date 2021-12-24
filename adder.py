@@ -46,25 +46,26 @@ class adder(Function):
         ctx.save_for_backward(W_col,X_col) 
         Co = W_col.size(0)
         HoWoN = X_col.size(1)
-
-        output = torch.zeros((Co, HoWoN),device="cuda:0")
+        
+        W_col.device
+        output = torch.zeros((Co, HoWoN),device=W_col.device)
         adder_cuda.ADDER_CONV(X_col, W_col, output)
 
         ###############test code################
         # ground_truth = -(W_col.unsqueeze(2)-X_col.unsqueeze(0)).abs().sum(1)
         # sub = output - ground_truth
         # print("check result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
+        ###############test end#################
+        
         return output
 
     @staticmethod
     def backward(ctx,grad_output):
         W_col,X_col = ctx.saved_tensors
 
-        grad_W_col = torch.zeros_like(W_col)
-        grad_X_col = torch.zeros_like(X_col)
+        grad_W_col = torch.zeros_like(W_col,device=W_col.device)
+        grad_X_col = torch.zeros_like(X_col,device=X_col.device)
         adder_cuda.ADDER_BACKWARD(grad_output, X_col, W_col, grad_W_col, grad_X_col)
-        # print(torch.any(torch.isnan(grad_W_col)))
-        # print(torch.any(torch.isnan(grad_X_col)))
         ###############test code################
         # gt_w = ((X_col.unsqueeze(0)-W_col.unsqueeze(2))*grad_output.unsqueeze(1)).sum(2)
         # sub = grad_W_col - gt_w
@@ -74,8 +75,6 @@ class adder(Function):
         # sub = grad_X_col - gt_x
         # print("check grad_X_col result:", torch.sum(sub), torch.var(sub), torch.max(sub), torch.min(sub))
         ###############test end#################
-        # print(grad_W_col[0][0])
-        # print(grad_W_col.norm(p=2))
         grad_W_col = grad_W_col/grad_W_col.norm(p=2).clamp(min=1e-12)*math.sqrt(W_col.size(1)*W_col.size(0))/5
         
         return grad_W_col, grad_X_col

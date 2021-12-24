@@ -162,9 +162,9 @@ if __name__ == "__main__":
 
     CHECK_TRUTH = 1
 
-    N = 256
-    Co = 12
-    Ci = 36
+    N = 16
+    Co = 32
+    Ci = 32
     K = 3
     HWi = 8
     HWo = 8
@@ -173,8 +173,4 @@ if __name__ == "__main__":
 
     test_conv(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
 
-    # test_conv_weight(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
-
-    # test_conv_input(N,Co,Ci,K,HWi,HWo,stride,padding,CHECK_TRUTH)
-
-    # test_backward(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH)
+    test_backward(N, Co, Ci, K, HWi, HWo, stride, padding, CHECK_TRUTH)

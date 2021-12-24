@@ -8,7 +8,7 @@ import os
 
 from torch.autograd.grad_mode import F
 # from resnet20 import resnet20
-from vgg import vgg16
+import vgg
 from densenet import densenet_cifar
 import torch
 from torch.autograd import Variable
@@ -35,6 +35,7 @@ os.makedirs(args.output_dir, exist_ok=True)
 acc = 0
 acc_best = 0
 train_loss = 0
+GPU_ID = 0
 
 transform_train = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
@@ -56,30 +57,30 @@ data_test = CIFAR10(args.data,
                   transform=transform_test,
                   download=True)
 
-data_train_loader = DataLoader(data_train, batch_size=216, shuffle=True, num_workers=8)
-data_test_loader = DataLoader(data_test, batch_size=100, num_workers=0)
+data_train_loader = DataLoader(data_train, batch_size=240, shuffle=True, num_workers=8)
+data_test_loader = DataLoader(data_test, batch_size=96, num_workers=0)
 
-net = densenet_cifar().cuda()
+net = densenet_cifar().cuda(device=GPU_ID)
+# net = vgg.vgg11().cuda(device=GPU_ID)
 # net = torch.load("./models/addernet.pt")
-criterion = torch.nn.CrossEntropyLoss().cuda()
+criterion = torch.nn.CrossEntropyLoss().cuda(device=GPU_ID)
 optimizer = torch.optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
 wandb.watch(net)
 def adjust_learning_rate(optimizer, epoch):
     """For resnet, the lr starts from 0.1, and is divided by 10 at 80 and 120 epochs"""
-    lr = 0.05 * (1+math.cos(float(epoch)/400*math.pi))
+    lr = 0.025 * (1+math.cos(float(epoch)/400*math.pi))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
         
 def train(epoch):
     adjust_learning_rate(optimizer, epoch)
     global cur_batch_win,train_loss
-    # train_loss = 0
     net.train()
     loss_list, batch_list = [], []
     old_t = time.time()
     for i, (images, labels) in enumerate(data_train_loader):
-        images, labels = Variable(images).cuda(), Variable(labels).cuda()
-        if images.size(0) != 216:
+        images, labels = Variable(images).cuda(device = GPU_ID), Variable(labels).cuda(device = GPU_ID)
+        if images.size(0) % 12 != 0:
             break
  
         optimizer.zero_grad()
@@ -93,11 +94,7 @@ def train(epoch):
  
         
         new_t = time.time()
-        # if i % 20 == 1:
-        # train_loss += loss.data.item()
         print('Train - Epoch %d, Batch: %d, Loss: %f, Time %3f' % (epoch, i, loss.data.item(), new_t - old_t))
-        # wandb.log({"Epoch":epoch,"Batch":i,"Loss":loss.data.item(),"Time":new_t - old_t})
-        # print("batch time:{}s".format(new_t - old_t))
         old_t = new_t
  
         loss.backward()
@@ -110,18 +107,24 @@ def test(e):
     net.eval()
     total_correct = 0
     avg_loss = 0.0
+    total_img = 0
     with torch.no_grad():
         for i, (images, labels) in enumerate(data_test_loader):
-            images, labels = Variable(images).cuda(), Variable(labels).cuda()
+            images, labels = Variable(images).cuda(device = GPU_ID), Variable(labels).cuda(device = GPU_ID)
+            if images.size(0) %12 != 0:
+                break
+            total_img += images.size(0)
             output = net(images)
             avg_loss += criterion(output, labels).sum()
             pred = output.data.max(1)[1]
             total_correct += pred.eq(labels.data.view_as(pred)).sum()
  
-    avg_loss /= len(data_test)
-    acc = float(total_correct) / len(data_test)
+    avg_loss /= total_img
+    acc = float(total_correct) / total_img
     if acc_best < acc:
         acc_best = acc
+        if acc_best>0.85:
+            torch.save(net.state_dict(), args.output_dir + 'densenet')
     print('Test Avg. Loss: %f, Accuracy: %f' % (avg_loss.data.item(), acc))
     wandb.log({"Epoch":e, "Test Loss":avg_loss.data.item(),"Train loss":train_loss,"Accuracy":acc})
  
@@ -132,13 +135,9 @@ def train_and_test(epoch):
  
  
 def main():
-    epoch = 401
-    # net = torch.load("./models/addernet.pt")
-    # net.load_state_dict(torch.load("./models/addernet.pt"))
+    epoch = 400
     for e in range(1, epoch):
         train_and_test(e)
-        if e%20 == 0:
-            torch.save(net.state_dict(),args.output_dir + 'densenet' + str(acc_best))
  
  
 if __name__ == '__main__':
